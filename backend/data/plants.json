@@ -1,0 +1,6 @@
+{
+  "RSP": { "name": "Rourkela Steel Plant", "state": "Odisha",       "nearest_port": "paradip", "rail_distance_km": 210, "rail_rate_per_mt_km": 1.9 },
+  "BSP": { "name": "Bhilai Steel Plant",   "state": "Chhattisgarh", "nearest_port": "paradip", "rail_distance_km": 550, "rail_rate_per_mt_km": 1.7 },
+  "BSL": { "name": "Bokaro Steel Plant",   "state": "Jharkhand",    "nearest_port": "haldia",  "rail_distance_km": 330, "rail_rate_per_mt_km": 1.8 },
+  "DSP": { "name": "Durgapur Steel Plant", "state": "West Bengal",  "nearest_port": "haldia",  "rail_distance_km": 260, "rail_rate_per_mt_km": 1.85 }
+}

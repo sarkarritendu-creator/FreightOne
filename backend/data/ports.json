@@ -1,0 +1,9 @@
+{
+  "paradip":    { "name": "Paradip",           "state": "Odisha",         "draft_m": 18.0, "loa_m": 300, "beam_m": 45, "handling_rate_mt_per_day": 30000, "ships_in_queue": 2, "berths": 3, "lat": 20.31, "lon": 86.67 },
+  "vizag":      { "name": "Visakhapatnam",     "state": "Andhra Pradesh", "draft_m": 18.1, "loa_m": 310, "beam_m": 48, "handling_rate_mt_per_day": 28000, "ships_in_queue": 3, "berths": 3, "lat": 17.68, "lon": 83.22 },
+  "gangavaram": { "name": "Gangavaram",        "state": "Andhra Pradesh", "draft_m": 20.0, "loa_m": 320, "beam_m": 50, "handling_rate_mt_per_day": 35000, "ships_in_queue": 1, "berths": 2, "lat": 17.62, "lon": 83.25 },
+  "gopalpur":   { "name": "Gopalpur",          "state": "Odisha",         "draft_m": 15.0, "loa_m": 250, "beam_m": 40, "handling_rate_mt_per_day": 18000, "ships_in_queue": 1, "berths": 1, "lat": 19.27, "lon": 84.90 },
+  "dhamra":     { "name": "Dhamra",            "state": "Odisha",         "draft_m": 18.5, "loa_m": 300, "beam_m": 46, "handling_rate_mt_per_day": 32000, "ships_in_queue": 2, "berths": 2, "lat": 20.79, "lon": 86.98 },
+  "sandheads":  { "name": "Sagar / Sandheads", "state": "West Bengal",    "draft_m": 8.5,  "loa_m": 200, "beam_m": 32, "handling_rate_mt_per_day": 12000, "ships_in_queue": 1, "berths": 1, "lat": 21.65, "lon": 88.05 },
+  "haldia":     { "name": "Haldia",            "state": "West Bengal",    "draft_m": 7.5,  "loa_m": 186, "beam_m": 30, "handling_rate_mt_per_day": 15000, "ships_in_queue": 5, "berths": 2, "lat": 22.03, "lon": 88.06 }
+}

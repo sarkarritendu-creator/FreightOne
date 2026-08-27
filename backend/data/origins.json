@@ -1,0 +1,7 @@
+{
+  "australia":  { "label": "Newcastle / Gladstone, Australia", "base_sea_rate_multiplier": 1.00, "typical_transit_days": 16 },
+  "us":         { "label": "Norfolk / Baltimore, USA",          "base_sea_rate_multiplier": 1.90, "typical_transit_days": 32 },
+  "mozambique": { "label": "Beira / Nacala, Mozambique",        "base_sea_rate_multiplier": 0.80, "typical_transit_days": 14 },
+  "russia":     { "label": "Vostochny / Murmansk, Russia",      "base_sea_rate_multiplier": 1.60, "typical_transit_days": 26 },
+  "indonesia":  { "label": "Kalimantan, Indonesia",             "base_sea_rate_multiplier": 0.55, "typical_transit_days": 8  }
+}

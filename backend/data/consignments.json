@@ -1,0 +1,6 @@
+[
+  { "id": "SC-2201", "plant": "RSP", "origin": "australia",  "port": "paradip",    "vessel": "Capesize", "tonnage": 150000, "status": "on_schedule", "eta_port_days": 4 },
+  { "id": "SC-2198", "plant": "BSL", "origin": "indonesia",  "port": "haldia",     "vessel": "Handysize", "tonnage": 35000,  "status": "delayed", "delay_days": 6, "delay_reason": "Cyclonic weather advisory near the West Bengal coast", "eta_port_days": 1 },
+  { "id": "SC-2185", "plant": "DSP", "origin": "mozambique", "port": "dhamra",     "vessel": "Supramax",  "tonnage": 58000,  "status": "on_schedule", "eta_port_days": 9 },
+  { "id": "SC-2179", "plant": "BSP", "origin": "australia",  "port": "gangavaram", "vessel": "Panamax",   "tonnage": 82000,  "status": "on_schedule", "eta_port_days": 12 }
+]

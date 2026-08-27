@@ -1,0 +1,7 @@
+{
+  "Coaster":   { "capacity_mt": 15000,  "draft_req_m": 6.5,  "loa_req_m": 130, "beam_req_m": 20.0, "sea_rate_per_mt": 26.0 },
+  "Handysize": { "capacity_mt": 35000,  "draft_req_m": 10.0, "loa_req_m": 190, "beam_req_m": 28.0, "sea_rate_per_mt": 22.0 },
+  "Supramax":  { "capacity_mt": 58000,  "draft_req_m": 12.5, "loa_req_m": 200, "beam_req_m": 32.0, "sea_rate_per_mt": 19.0 },
+  "Panamax":   { "capacity_mt": 82000,  "draft_req_m": 14.5, "loa_req_m": 225, "beam_req_m": 32.3, "sea_rate_per_mt": 16.0 },
+  "Capesize":  { "capacity_mt": 180000, "draft_req_m": 17.0, "loa_req_m": 292, "beam_req_m": 45.0, "sea_rate_per_mt": 12.5 }
+}
