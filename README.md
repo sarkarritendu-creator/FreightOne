@@ -1,3 +1,4 @@
+
 # FreightOne — Final Full-Stack Prototype
 
 This package preserves the approved UI and connects it to the FastAPI backend.
@@ -32,3 +33,9 @@ Open the URL printed by Vite (normally http://localhost:5173).
 - Rankings account for landed cost, ETA, congestion, and risk.
 - Forecast uses 90 days with a widening confidence band.
 - Consignments expose port ETA, earliest dispatch, final arrival, and reroute suggestions for delayed shipments.
+Test modification for login branch
+Test modification for login-auth branch
+Test modification for login-auth branch
+Test modification for optimizer branch
+Test modification for tracker-contingency branch
+
