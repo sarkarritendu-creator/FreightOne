@@ -1,27 +1,21 @@
-# FreightOne v6 — Preferred UI + Stable Backend
+# FreightOne — Proper Full-Stack Rebuild
 
-This package preserves the uploaded preferred frontend and fixes its actual runtime/backend issues.
+This rebuild is based on the earlier FreightOne workflow and visual structure rather than the previous generic full-stack prototype.
 
-## Important frontend fixes
-- Added missing `useCallback` import (Tracker crashed because it used `useCallback` without importing it).
-- Kept the preferred visual design and component structure.
-- Vite proxy routes `/api/*` to FastAPI at `127.0.0.1:8000`.
-- Fixed Procurement Planner to actually use the selected plant.
-- Backend implements every endpoint the frontend calls.
+## Included left-sidebar modules
+1. Command Center
+2. Procurement Planner
+3. Freight Intelligence
+4. Port Optimizer
+5. Consignment Tracker
+6. What-if Simulation
+7. Alert Center
+8. Stock & Inventory
+9. Executive Report
 
-## Backend
-- FastAPI
-- PostgreSQL through SQLAlchemy + psycopg
-- Seeded managers, inventory and consignments
-- Material-aware route decision engine
-- Procurement intelligence
-- Risk/news feed endpoint
-- Forecast data
-- Contingency/rerouting
-- What-if simulation
-
-## Start PostgreSQL
-Make sure PostgreSQL is running and database `freightone` exists.
+## Demo login
+- Manager ID: `r.sharma`
+- Password: `sail123`
 
 ## Backend
 ```bash
@@ -29,22 +23,17 @@ cd backend
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-export DATABASE_URL="postgresql+psycopg://tapassaha@localhost:5432/freightone"
-uvicorn main:app --reload
+uvicorn main:app --reload --port 8000
 ```
 
-Check:
-`http://127.0.0.1:8000/api/health`
-
 ## Frontend
-In a second terminal:
+Open another terminal:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
+
 Open `http://localhost:5173`.
 
-## Demo credentials
-- `demo-manager` / `demo-password`
-- `r.sharma` / `sail123`
+The backend is intentionally prototype-oriented and uses coherent static operational data and deterministic rules. The architecture keeps the existing API-driven model: frontend = presentation and interaction; FastAPI = decision logic.

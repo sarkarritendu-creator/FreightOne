@@ -1,1 +1,6 @@
-{"name":"freightone-v6","private":true,"version":"6.0.0","type":"module","scripts":{"dev":"vite","build":"vite build","preview":"vite preview"},"dependencies":{"@vitejs/plugin-react":"latest","vite":"latest","react":"latest","react-dom":"latest","lucide-react":"latest","recharts":"latest"},"devDependencies":{}}
+{
+  "name":"freightone-proper-rebuild","version":"1.0.0","private":true,
+  "scripts":{"dev":"vite","build":"vite build","preview":"vite preview"},
+  "dependencies":{"@vitejs/plugin-react":"latest","vite":"latest","react":"latest","react-dom":"latest","recharts":"latest","lucide-react":"latest"},
+  "devDependencies":{}
+}

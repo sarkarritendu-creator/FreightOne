@@ -1,164 +1,178 @@
-from __future__ import annotations
-import os, math, random
-from datetime import date, timedelta
-from contextlib import asynccontextmanager
-from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from sqlalchemy import create_engine, Column, String, Float, Integer, Boolean, Date, JSON, text
-from sqlalchemy.orm import declarative_base, sessionmaker
+from pydantic import BaseModel
+from typing import Optional
+from datetime import date, timedelta
+import math, random
 
-DATABASE_URL=os.getenv('DATABASE_URL','postgresql+psycopg://localhost:5432/freightone')
-Base=declarative_base()
-engine=create_engine(DATABASE_URL,pool_pre_ping=True,future=True)
-SessionLocal=sessionmaker(bind=engine,autocommit=False,autoflush=False)
+app = FastAPI(title='FreightOne API', version='3.0.0')
+app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_methods=['*'], allow_headers=['*'])
 
-class Manager(Base):
-    __tablename__='managers'; manager_id=Column(String,primary_key=True); password=Column(String,nullable=False); name=Column(String,nullable=False); plant_code=Column(String,nullable=False)
-class Consignment(Base):
-    __tablename__='consignments'; id=Column(String,primary_key=True); plant_code=Column(String,index=True); material_code=Column(String); origin_code=Column(String); port_code=Column(String); vessel=Column(String); tonnage=Column(Float); status=Column(String); delay_days=Column(Integer,default=0); delay_reason=Column(String,nullable=True); eta_days=Column(Integer); progress=Column(Integer,default=35)
-class Inventory(Base):
-    __tablename__='inventory'; id=Column(Integer,primary_key=True,autoincrement=True); plant_code=Column(String,index=True); material_code=Column(String,index=True); current_inventory_mt=Column(Float); daily_consumption_mt=Column(Float); safety_days=Column(Integer)
-
-ORIGINS={
-'australia':{'label':'Australia','material_bias':['coking_coal','thermal_coal'],'transit':18,'rate':1.0},
-'indonesia':{'label':'Indonesia','material_bias':['thermal_coal'],'transit':9,'rate':0.86},
-'mozambique':{'label':'Mozambique','material_bias':['coking_coal'],'transit':16,'rate':1.05},
-'russia':{'label':'Russia','material_bias':['thermal_coal','coking_coal'],'transit':22,'rate':1.12},
-'usa':{'label':'United States','material_bias':['coking_coal'],'transit':30,'rate':1.2},
+TODAY = date.today()
+MATERIALS = {
+ 'coking_coal': {'name':'Coking Coal','price_mt':18200,'daily_consumption':4200,'inventory_mt':108000,'safety_stock':45000,'suppliers':['Australia','USA','Mozambique']},
+ 'iron_ore': {'name':'Iron Ore','price_mt':7800,'daily_consumption':7200,'inventory_mt':205000,'safety_stock':80000,'suppliers':['Australia','Brazil','South Africa']},
+ 'limestone': {'name':'Limestone','price_mt':3200,'daily_consumption':3800,'inventory_mt':96000,'safety_stock':40000,'suppliers':['UAE','Oman','India']},
 }
-PORTS={
-'vizag':{'name':'Visakhapatnam','km':450,'handling':65000,'base_cost':42},'gangavaram':{'name':'Gangavaram','km':470,'handling':70000,'base_cost':39},'paradip':{'name':'Paradip','km':620,'handling':78000,'base_cost':36},'dhamra':{'name':'Dhamra','km':760,'handling':50000,'base_cost':44},'haldia':{'name':'Haldia','km':910,'handling':42000,'base_cost':52},'gopalpur':{'name':'Gopalpur','km':530,'handling':35000,'base_cost':49}}
-PLANTS={'RSP':{'name':'Rourkela Steel Plant'},'BSP':{'name':'Bokaro Steel Plant'},'DSP':{'name':'Durgapur Steel Plant'}}
-MATERIALS={
-'coking_coal':{'name':'Coking Coal','category':'Metallurgical','preferred_origins':['australia','mozambique','usa','russia'],'preferred_ports':['vizag','gangavaram','paradip'],'daily_multiplier':1.0},
-'thermal_coal':{'name':'Thermal Coal','category':'Energy','preferred_origins':['indonesia','australia','russia'],'preferred_ports':['paradip','dhamra','haldia'],'daily_multiplier':1.15},
-'iron_ore':{'name':'Iron Ore','category':'Bulk Raw Material','preferred_origins':['australia'],'preferred_ports':['vizag','paradip'],'daily_multiplier':0.9},
+ORIGINS = {
+ 'australia': {'label':'Australia','sea_days':18,'mult':1.00},
+ 'usa': {'label':'USA','sea_days':28,'mult':1.12},
+ 'mozambique': {'label':'Mozambique','sea_days':14,'mult':0.96},
+ 'brazil': {'label':'Brazil','sea_days':32,'mult':1.18},
 }
+PORTS = {
+ 'paradip': {'name':'Paradip Port','queue':2,'congestion':'Low','inland_days':2,'risk':18,'cost_mt':520},
+ 'haldia': {'name':'Haldia Port','queue':4,'congestion':'Medium','inland_days':5,'risk':34,'cost_mt':710},
+ 'vizag': {'name':'Visakhapatnam Port','queue':3,'congestion':'Medium','inland_days':4,'risk':27,'cost_mt':620},
+}
+PLANTS = {'RSP': {'name':'Rourkela Steel Plant','location':'Odisha','nearest_port':'Paradip','rank':'Senior Manager'}}
+USERS = {'r.sharma': {'password':'sail123','name':'R. Sharma','employee_id':'SAIL-20417','rank':'Senior Manager','plant':'RSP','posting_place':'Rourkela Steel Plant'}}
 
-def seed():
-    Base.metadata.create_all(engine)
-    with SessionLocal() as db:
-        if db.query(Manager).count()==0:
-            db.add_all([Manager(manager_id='demo-manager',password='demo-password',name='Demo Manager',plant_code='RSP'),Manager(manager_id='r.sharma',password='sail123',name='R. Sharma',plant_code='RSP')])
-        if db.query(Inventory).count()==0:
-            for pc in PLANTS:
-                for mc,m in MATERIALS.items(): db.add(Inventory(plant_code=pc,material_code=mc,current_inventory_mt=180000 if mc=='coking_coal' else 130000,daily_consumption_mt=11500 if mc=='coking_coal' else 8000,safety_days=12))
-        if db.query(Consignment).count()==0:
-            db.add_all([
-              Consignment(id='FO-2026-001',plant_code='RSP',material_code='coking_coal',origin_code='australia',port_code='vizag',vessel='Panamax',tonnage=75000,status='on_schedule',eta_days=8,progress=62),
-              Consignment(id='FO-2026-002',plant_code='RSP',material_code='coking_coal',origin_code='mozambique',port_code='paradip',vessel='Supramax',tonnage=55000,status='delayed',delay_days=3,delay_reason='Berth congestion and weather-related unloading delay.',eta_days=11,progress=48),
-              Consignment(id='FO-2026-003',plant_code='BSP',material_code='thermal_coal',origin_code='indonesia',port_code='dhamra',vessel='Supramax',tonnage=60000,status='on_schedule',eta_days=6,progress=71)])
-        db.commit()
+CONSIGNMENTS = [
+ {'id':'FO-2419','plant':'RSP','material':'coking_coal','origin':'Australia','port':'Paradip','vessel':'MV Eastern Horizon','tonnage':72000,'status':'On schedule','progress':76,'delay_days':0,'delay_reason':None,'port_eta':8,'final_days':11,'position':'Bay of Bengal'},
+ {'id':'FO-2423','plant':'RSP','material':'iron_ore','origin':'Brazil','port':'Haldia','vessel':'MV Atlantic Crown','tonnage':90000,'status':'Delayed','progress':61,'delay_days':6,'delay_reason':'Port congestion and weather-related berth delay','port_eta':13,'final_days':20,'position':'North Bay of Bengal'},
+ {'id':'FO-2431','plant':'RSP','material':'coking_coal','origin':'Mozambique','port':'Paradip','vessel':'MV Cape Meridian','tonnage':65000,'status':'Future','progress':18,'delay_days':0,'delay_reason':None,'port_eta':22,'final_days':25,'position':'Port of Beira'},
+ {'id':'FO-2388','plant':'RSP','material':'limestone','origin':'Australia','port':'Vizag','vessel':'MV Ocean Crest','tonnage':48000,'status':'Delivered','progress':100,'delay_days':0,'delay_reason':None,'port_eta':-35,'final_days':-31,'position':'Delivered'},
+]
 
-def vessel_for(tonnage,port):
-    if tonnage>=120000 and port in ['vizag','paradip','gangavaram']: return 'Capesize'
-    if tonnage>=65000:return 'Panamax'
-    return 'Supramax' if tonnage>=35000 else 'Handysize'
+class LoginIn(BaseModel): manager_id: str; password: str
+class RouteIn(BaseModel): material: str='coking_coal'; origin: str='australia'; preferred_port: str='paradip'; priority: int=50; tonnage: int=80000; plant_code: str='RSP'; final_delivery: Optional[str]=None
+class ProcurementIn(BaseModel): material: str='coking_coal'; quantity: int=80000; deadline_days: int=21; preferred_port: str='paradip'; priority: int=50; plant_code: str='RSP'
+class RerouteIn(BaseModel): consignment_id: str
 
-def risk(origin,port,material):
-    score=18
-    if origin=='russia':score+=18
-    if port=='paradip':score+=9
-    if material=='thermal_coal':score+=4
-    return min(95,score)
 
-def level(score): return 'red' if score>=65 else 'amber' if score>=35 else 'green'
+def fmt_day(days): return (TODAY + timedelta(days=days)).isoformat()
 
-def route_options(payload):
-    mat=MATERIALS[payload.material]; origin=ORIGINS[payload.origin]; opts=[]
+def forecast(days=90):
+    hist=[]; pred=[]
+    base=1320
+    for i in range(60):
+        v=base + math.sin(i/7)*34 + math.cos(i/13)*18 + i*0.7
+        hist.append({'day':i-59,'index':round(v,1)})
+    last=hist[-1]['index']
+    for i in range(1,days+1):
+        v=last + i*1.8 + math.sin(i/6)*26
+        band=32+i*0.65
+        pred.append({'day':i,'predicted':round(v,1),'lower':round(v-band,1),'upper':round(v+band,1)})
+    return {'history':hist,'forecast':pred,'current_bdi':round(last,1),'model_horizon_days':days}
+
+def route_options(x: RouteIn):
+    material=MATERIALS.get(x.material,MATERIALS['coking_coal'])
+    origin=ORIGINS.get(x.origin,ORIGINS['australia'])
+    options=[]
     for pid,p in PORTS.items():
-        affinity=1.0 if pid in mat['preferred_ports'] else .72
-        preferred_bonus=.0
-        if pid==payload.preferred_port: preferred_bonus=0
-        sea=payload.tonnage*(42*origin['rate']+p['base_cost'])
-        inland=payload.tonnage*(p['km']/100)*1.8
-        total=sea+inland
-        eta=origin['transit']+math.ceil(payload.tonnage/p['handling']*4)+math.ceil(p['km']/350)
-        rs=risk(payload.origin,pid,payload.material)
-        price_score=100-(total/100000000)*100
-        time_score=100-min(90,eta*3.3)
-        suitability=round(45+35*affinity+12*(pid in mat['preferred_ports'])-rs*.12,1)
-        score=(100-payload.priority)/100*price_score+payload.priority/100*time_score+suitability*.18-rs*.08
-        tags=['Material-preferred'] if pid in mat['preferred_ports'] else []
-        if pid==payload.preferred_port: tags.insert(0,'Manager selected')
-        opts.append({'port_id':pid,'port':p['name'],'material':mat['name'],'cost_per_mt':round(total/payload.tonnage,2),'total_cost':round(total),'eta_days':int(eta),'risk_score':rs,'risk_level':level(rs),'vessel':vessel_for(payload.tonnage,pid),'ml_suitability_score':suitability,'score':score,'tags':tags,'reason':f"{mat['name']} lane analysis combines landed cost, ETA, material-port suitability and current risk for {p['name']}."})
-    ranked=sorted(opts,key=lambda x:x['score'],reverse=True)
-    for i,o in enumerate(ranked,1):o['optimization_rank']=i
-    selected=next(o for o in opts if o['port_id']==payload.preferred_port)
-    display=[selected]+[o for o in ranked if o['port_id']!=selected['port_id']]
-    alt=ranked[0] if ranked[0]['port_id']!=selected['port_id'] else None
-    return {'selected_port':selected,'options':display,'ranking_note':'Your selected port is always displayed first; true optimization rank remains visible separately.','better_alternative':None if not alt else {'port':alt['port'],'message':f"Model ranks {alt['port']} higher at #{alt['optimization_rank']} based on current landed cost, ETA, risk and material suitability."}}
+        sea_cost=material['price_mt']*origin['mult']*0.045
+        priority_factor=(x.priority/100)*0.35
+        eta=origin['sea_days']+p['queue']+p['inland_days']
+        cost_per_mt=material['price_mt']+sea_cost+p['cost_mt']+eta*12*priority_factor
+        risk=min(100,p['risk']+max(0,x.priority-70)*0.18)
+        vessel='Capesize' if x.tonnage>=80000 and pid!='haldia' else ('Panamax' if x.tonnage>=45000 else 'Handysize')
+        score=cost_per_mt+eta*(18+priority_factor*18)+risk*22
+        options.append({'port_id':pid,'port':p['name'],'cost_per_mt':round(cost_per_mt),'total_cost':round(cost_per_mt*x.tonnage),'eta_days':eta,'risk_score':round(risk),'congestion':p['congestion'],'vessel':vessel,'optimization_score':round(score),'manager_preference':pid==x.preferred_port,'tags':[p['congestion']+' congestion', vessel]})
+    options.sort(key=lambda o:o['optimization_score'])
+    for i,o in enumerate(options,1): o['optimization_rank']=i
+    selected=next(o for o in options if o['port_id']==x.preferred_port)
+    best=options[0]
+    better=None
+    if best['port_id']!=selected['port_id']:
+        better={'port':best['port'],'message':f"{best['port']} reduces estimated landed cost and recovery exposure versus the selected preference."}
+    return {'selected_port':selected,'best_overall':best,'options':options,'better_alternative':better,'material':material['name']}
 
-class LoginRequest(BaseModel): manager_id:str; password:str
-class RouteRequest(BaseModel): tonnage:float=Field(gt=0); material:str; origin:str; preferred_port:str; priority:float=Field(ge=0,le=100); plant_code:str; final_delivery:dict={}
-class ProcurementRequest(BaseModel): plant_code:str; material:str; horizon_days:int=60
-class RerouteRequest(BaseModel): consignment_id:str
-
-@asynccontextmanager
-async def lifespan(app):
-    seed(); yield
-app=FastAPI(title='FreightOne API',version='6.0',lifespan=lifespan,docs_url='/docs',redoc_url=None)
-app.add_middleware(CORSMiddleware,allow_origins=['http://localhost:5173','http://127.0.0.1:5173'],allow_methods=['*'],allow_headers=['*'])
+def procurement(x: ProcurementIn):
+    m=MATERIALS.get(x.material,MATERIALS['coking_coal'])
+    days_cover=m['inventory_mt']/m['daily_consumption']
+    reorder=max(0,m['safety_stock']+m['daily_consumption']*x.deadline_days-m['inventory_mt'])
+    urgency=min(10,max(1,round((x.deadline_days/max(days_cover,1))*5 + (1 if m['inventory_mt']<m['safety_stock']*1.5 else 0))))
+    route=route_options(RouteIn(material=x.material,origin='australia',preferred_port=x.preferred_port,priority=x.priority,tonnage=x.quantity,plant_code=x.plant_code))
+    rec=max(x.quantity,reorder,40000)
+    return {'material':m['name'],'manager_preference':{'quantity_mt':x.quantity,'deadline_days':x.deadline_days,'preferred_port':PORTS[x.preferred_port]['name'],'priority':x.priority},'model_output':{'recommended_quantity_mt':round(rec/1000)*1000,'reorder_now':urgency>=7,'days_of_cover':round(days_cover,1),'urgency_index':urgency,'recommended_port':route['best_overall']['port'],'estimated_landed_cost':route['best_overall']['total_cost'],'reason':f"Current stock covers about {round(days_cover)} days. The decision combines inventory exposure, lead time and freight risk."}}
 
 @app.get('/api/health')
-def health():
-    with engine.connect() as c:c.execute(text('SELECT 1'))
-    return {'status':'ok','service':'FreightOne API','database':'connected'}
+def health(): return {'status':'ok','service':'FreightOne API'}
+
 @app.post('/api/login')
-def login(r:LoginRequest):
-    with SessionLocal() as db:
-        m=db.get(Manager,r.manager_id)
-        if not m or m.password!=r.password: raise HTTPException(401,'Invalid Manager ID or password')
-        return {'manager':{'id':m.manager_id,'name':m.name,'plant':m.plant_code},'plant':PLANTS[m.plant_code]}
+def login(x: LoginIn):
+    u=USERS.get(x.manager_id.lower())
+    if not u or u['password']!=x.password: raise HTTPException(401,'Invalid Manager ID or password')
+    manager={k:v for k,v in u.items() if k!='password'}
+    plant=PLANTS[u['plant']]
+    return {'manager':manager,'plant':plant}
+
 @app.get('/api/reference-data')
-def refs():return {'materials':MATERIALS,'origins':ORIGINS,'ports':PORTS,'plants':PLANTS}
+def refs(): return {'materials':MATERIALS,'origins':ORIGINS,'ports':PORTS,'plants':PLANTS}
 @app.get('/api/forecast')
-def forecast(days:int=90):
-    hist=[]; fc=[]; base=1320
-    for i in range(1,31): hist.append({'day':i,'index':round(base+2.8*i+28*math.sin(i/4),1),'upper':None,'lower':None,'predicted':None})
-    for i in range(31,days+1):
-        pred=base+2.8*i+28*math.sin(i/4); band=25+(i-30)*.7; fc.append({'day':i,'predicted':round(pred,1),'upper':round(pred+band,1),'lower':round(pred-band,1),'index':None})
-    return {'history':hist,'forecast':fc}
+def api_forecast(days:int=90): return forecast(min(max(days,30),180))
+@app.get('/api/risk-score')
+def risk_score():
+    return {'risk_score':68,'risk_level':'amber','items':[
+      {'title':'Low-pressure conditions are affecting the Bay of Bengal shipping corridor.','tags':['WEATHER'],'published':'LIVE'},
+      {'title':'Queensland coal export loading has slowed after terminal disruption.','tags':['MARKET'],'published':'LIVE'},
+      {'title':'VLSFO bunker prices remain elevated across Indian Ocean routes.','tags':['FUEL'],'published':'LIVE'}]}
 @app.get('/api/news')
-def news(material:str='coking_coal',origin:str='australia',port:str='vizag'):
-    rs=risk(origin,port,material); items=[
-      {'title':f'{ORIGINS[origin]["label"]} bulk export conditions remain under watch','published':'LIVE','tags':['ORIGIN','RISK'],'url':'https://www.reuters.com/'},
-      {'title':f'{PORTS[port]["name"]} congestion and handling conditions monitored','published':'LIVE','tags':['PORT','LOGISTICS'],'url':'https://www.reuters.com/'},
-      {'title':'Dry bulk freight market volatility remains elevated','published':'LIVE','tags':['MARKET'],'url':'https://www.reuters.com/'}]
-    return {'risk_score':rs,'risk_level':level(rs),'items':items}
+def news(material:str='coking_coal',origin:str='australia',port:str='paradip'): return risk_score()
 @app.get('/api/market-intelligence')
-def market(material:str='coking_coal',origin:str='australia',port:str='vizag',plant_code:str='RSP'):
-    with SessionLocal() as db: inv=db.query(Inventory).filter_by(plant_code=plant_code,material_code=material).first()
-    days=round(inv.current_inventory_mt/inv.daily_consumption_mt,1) if inv else 0; rs=risk(origin,port,material); buy=days<18 or rs>=50
-    return {'buy_more_now':buy,'reason':f"{days} days of cover against a {inv.safety_days if inv else 12}-day safety threshold; lane risk is {rs}/100. {'Advance procurement is recommended.' if buy else 'Current inventory is adequate; continue monitoring.'}"}
+def market_intelligence(material:str='coking_coal',origin:str='australia',port:str='paradip',plant_code:str='RSP'):
+    m=MATERIALS.get(material,MATERIALS['coking_coal']); cover=m['inventory_mt']/m['daily_consumption']
+    return {'buy_more_now':cover<30,'reason':f"{m['name']} has approximately {round(cover)} days of inventory cover. Freight risk is currently elevated, so booking timing should be monitored closely."}
 @app.post('/api/route-options')
-def route(r:RouteRequest):
-    if r.material not in MATERIALS or r.origin not in ORIGINS or r.preferred_port not in PORTS: raise HTTPException(400,'Invalid material, origin or port')
-    return route_options(r)
+def api_routes(x: RouteIn): return route_options(x)
 @app.post('/api/procurement-plan')
-def procurement(r:ProcurementRequest):
-    if r.material not in MATERIALS or r.plant_code not in PLANTS: raise HTTPException(400,'Invalid material or plant')
-    with SessionLocal() as db: inv=db.query(Inventory).filter_by(plant_code=r.plant_code,material_code=r.material).first()
-    days=round(inv.current_inventory_mt/inv.daily_consumption_mt,1); target=max(inv.safety_days+14,30); additional=max(0,round((target-days)*inv.daily_consumption_mt))
-    action='BUY MORE NOW' if days<20 else 'MONITOR MARKET'
-    trend=round(2.4+random.random()*2.8,1); rs=38 if action=='BUY MORE NOW' else 22
-    return {'inventory':{'current_inventory_mt':round(inv.current_inventory_mt),'days_of_cover':days},'recommendation':{'action':action,'additional_mt':additional,'timing':'Place order within 72 hours' if action=='BUY MORE NOW' else 'Re-evaluate daily'},'market':{'market_trend_30d_pct':trend,'risk_level':level(rs)},'explanation':f"The system combines inventory cover, consumption, safety stock, material preference and current market risk. {days} days of cover are currently available."}
+def api_procurement(x: ProcurementIn): return procurement(x)
 @app.get('/api/consignments')
-def consignments(plant_code:str):
-    today=date.today(); out=[]
-    with SessionLocal() as db: rows=db.query(Consignment).filter_by(plant_code=plant_code).all()
-    for c in rows:
-        eta=today+timedelta(days=c.eta_days); dispatch=eta+timedelta(days=2+c.delay_days); final=dispatch+timedelta(days=3)
-        out.append({'id':c.id,'material_label':MATERIALS[c.material_code]['name'],'origin_label':ORIGINS[c.origin_code]['label'],'port_label':PORTS[c.port_code]['name'],'plant_label':PLANTS[c.plant_code]['name'],'vessel':c.vessel,'tonnage':c.tonnage,'status':c.status,'delay_days':c.delay_days,'delay_reason':c.delay_reason,'eta_port_date':eta.isoformat(),'earliest_dispatch_from_port':dispatch.isoformat(),'expected_final_arrival':final.isoformat(),'progress':c.progress})
-    return {'consignments':out}
-@app.post('/api/reroute-suggestion')
-def reroute(r:RerouteRequest):
-    with SessionLocal() as db:c=db.get(Consignment,r.consignment_id)
+def consignments(plant_code:str='RSP', view:str='active'):
+    items=[]
+    for c in CONSIGNMENTS:
+        if c['plant']!=plant_code: continue
+        if view=='active' and c['status'] not in ['On schedule','Delayed']: continue
+        if view=='future' and c['status']!='Future': continue
+        if view=='past' and c['status']!='Delivered': continue
+        items.append({**c,'material_label':MATERIALS[c['material']]['name'],'origin_label':c['origin'],'port_label':PORTS[c['port']]['name'],'plant_label':PLANTS[c['plant']]['name'],'eta_port_date':fmt_day(c['port_eta']),'earliest_dispatch_from_port':fmt_day(c['port_eta']+2),'expected_final_arrival':fmt_day(c['final_days']),'risk_percentage':min(95,20+c['delay_days']*8) if c['status']=='Delayed' else 22})
+    return {'consignments':items}
+@app.get('/api/consignment/{cid}')
+def consignment(cid:str):
+    c=next((x for x in CONSIGNMENTS if x['id']==cid),None)
     if not c: raise HTTPException(404,'Consignment not found')
-    if c.status!='delayed':return {'suggestion':None}
-    return {'suggestion':{'donor_consignment':'FO-2026-003','diverted_tonnage_mt':25000,'estimated_recovery_days':max(1,c.delay_days-1),'message':'Temporary cross-plant diversion can bridge the delayed material requirement while the original cargo clears the port.','notification_status':'BSP manager notification prepared'}}
+    return {'consignment':c,'tracking':{'position':c['position'],'status':'Delayed' if c['status']=='Delayed' else 'On schedule','coordinates':[20.3,88.7]}}
+@app.post('/api/reroute-suggestion')
+def reroute(x:RerouteIn):
+    c=next((z for z in CONSIGNMENTS if z['id']==x.consignment_id),None)
+    if not c: raise HTTPException(404,'Consignment not found')
+    if c['status']!='Delayed': return {'suggestion':None,'message':'No reroute required for an on-schedule consignment.'}
+    return {'suggestion':{'recommended_port':'Paradip Port','recovery_mode':'Divert discharge + priority rail slot','estimated_recovery_days':4,'risk_reduction':31,'additional_cost':1850000,'message':'Reroute via Paradip and reserve a priority inland slot to recover approximately four of the six delayed days.','notification_status':'Draft notification ready for plant logistics control.'}}
+@app.get('/api/freight-intelligence')
+def freight_intelligence():
+    f=forecast(90)
+    return {'forecast':f,'booking_window':{'best_day':18,'expected_savings_percent':4.2,'reason':'Projected freight pressure eases before the next upward market cycle.'},'indices':{'BDI':f['current_bdi'],'Capesize':1880,'Panamax':1540,'Fuel':742}}
+@app.get('/api/weather')
+def weather():
+    return {'region':'Bay of Bengal','status':'Moderate operational risk','risk':{'green':52,'yellow':26,'orange':15,'red':7},'series':[{'day':i,'risk':round(18+8*math.sin(i/5)+max(0,i-18)*0.7,1)} for i in range(1,31)]}
+@app.get('/api/material-market')
+def material_market(material:str='coking_coal'):
+    m=MATERIALS.get(material,MATERIALS['coking_coal'])
+    countries=[]
+    for name,mult in [('Australia',1.0),('USA',1.12),('Mozambique',0.96)]: countries.append({'country':name,'price_mt':round(m['price_mt']*mult)})
+    countries.sort(key=lambda x:x['price_mt'])
+    return {'material':m['name'],'countries':countries,'lowest':countries[0]['country']}
+@app.get('/api/inventory')
+def inventory(plant_code:str='RSP'):
+    out=[]
+    for k,m in MATERIALS.items():
+        cover=m['inventory_mt']/m['daily_consumption']; urgency=min(10,max(1,round(60/max(cover,1))))
+        incoming=sum(c['tonnage'] for c in CONSIGNMENTS if c['plant']==plant_code and c['material']==k and c['status']!='Delayed')
+        out.append({'id':k,'material':m['name'],'stock_mt':m['inventory_mt'],'daily_consumption':m['daily_consumption'],'days_cover':round(cover,1),'incoming_mt':incoming,'urgency_index':urgency,'rating':'Critical' if urgency>=8 else 'Watch' if urgency>=5 else 'Healthy'})
+    return {'plant':PLANTS[plant_code]['name'],'items':out}
+@app.get('/api/alerts')
+def alerts():
+    return {'alerts':[
+      {'severity':'high','type':'CONSIGNMENT','title':'FO-2423 is delayed by 6 days','impact':'Iron ore supply exposure for Rourkela','action':'Open reroute recommendation'},
+      {'severity':'medium','type':'WEATHER','title':'Bay of Bengal weather risk elevated','impact':'Possible berth and sailing delay','action':'Monitor vessel ETA'},
+      {'severity':'medium','type':'MARKET','title':'BDI trend remains upward','impact':'Future charter cost sensitivity','action':'Review booking window'},
+    ]}
 @app.post('/api/what-if')
-def whatif(r:RouteRequest):
-    result=route_options(r); ranked=sorted(result['options'],key=lambda x:x['optimization_rank']); return {'selected_port':result['selected_port'],'best_overall':ranked[0]}
+def what_if(x: RouteIn):
+    r=route_options(x); sel=r['selected_port']; best=r['best_overall']
+    return {'base':sel,'what_if':best,'difference':{'cost_delta':best['total_cost']-sel['total_cost'],'eta_delta_days':best['eta_days']-sel['eta_days'],'risk_delta':best['risk_score']-sel['risk_score']},'summary':'The model compares the manager-selected scenario against the highest-ranked alternative using the same cost, time and risk logic.'}
+@app.get('/api/executive-report')
+def report():
+    inv=inventory()['items']; delayed=[c for c in CONSIGNMENTS if c['status']=='Delayed']
+    return {'summary':{'network_risk':68,'active_consignments':2,'delayed_consignments':len(delayed),'inventory_watch':sum(1 for i in inv if i['urgency_index']>=5)},'decisions':['Review reroute for FO-2423','Monitor coking coal booking window','Keep Paradip as preferred route for current high-priority loads'],'generated_on':TODAY.isoformat()}
