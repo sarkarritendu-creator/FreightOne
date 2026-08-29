@@ -1,0 +1,11 @@
+backend/venv/
+backend/.venv/
+__pycache__/
+*.pyc
+frontend/node_modules/
+frontend/dist/
+.env
+.env.*
+backend/.env
+backend/data/credentials_PRIVATE.csv
+.DS_Store
