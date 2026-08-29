@@ -656,9 +656,32 @@ export default function App() {
   const [page, setPage] = useState("dashboard");
   const [analysisParams, setAnalysisParams] = useState(null);
   const [riskLevel, setRiskLevel] = useState(null);
+  
+  // 1. Add state to hold the live data
+  const [liveData, setLiveData] = useState({ weather: [], market: null, alerts: [] });
 
   useEffect(() => {
     if (user) api("/api/risk-score").then((r) => setRiskLevel(r.level)).catch(() => {});
+  }, [user]);
+
+  // 2. Add the background polling loop
+  useEffect(() => {
+    if (!user) return; // Only fetch data if the user is logged in
+
+    const fetchRealTimeData = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/realtime');
+        const data = await response.json();
+        setLiveData(data);
+      } catch (error) {
+        console.error("Error fetching live data:", error);
+      }
+    };
+
+    fetchRealTimeData(); // Fetch immediately on load
+    const intervalId = setInterval(fetchRealTimeData, 10000); // Ping every 10 seconds
+
+    return () => clearInterval(intervalId); // Cleanup when component unmounts
   }, [user]);
 
   if (!user) return <LoginScreen onLogin={(m, p) => { setUser(m); setPlant(p); }} />;
@@ -669,7 +692,10 @@ export default function App() {
     <div className="min-h-screen" style={{ background: C.navy, fontFamily: "'Inter', sans-serif" }}>
       <style>{FONT_IMPORT}</style>
       <TopBar user={user} plant={plant} page={page === "analysis" ? "optimize" : page} setPage={setPage} onLogout={() => setUser(null)} riskLevel={riskLevel} />
-      {page === "dashboard" && <DashboardPage plant={plant} plantCode={user.plant} />}
+      
+      {/* 3. Pass liveData as a new prop to the DashboardPage */}
+      {page === "dashboard" && <DashboardPage plant={plant} plantCode={user.plant} liveData={liveData} />}
+      
       {page === "optimize" && <OptimizePage plantCode={user.plant} onOpenAnalysis={openAnalysis} />}
       {page === "tracker" && <TrackerPage plantCode={user.plant} />}
       {page === "analysis" && analysisParams && <AnalysisPage params={analysisParams} onBack={() => setPage("optimize")} />}
