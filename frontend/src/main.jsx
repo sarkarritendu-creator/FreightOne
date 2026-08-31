@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import ISTClock from './ISTClock'; 
 import { createRoot } from 'react-dom/client';
 import {
   Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer,
@@ -408,7 +409,7 @@ function Shell({ auth, page, setPage, onLogout, children }) {
             <span className="eyebrow">FREIGHTONE / {titleMap[page].toUpperCase()}</span>
             <h2>{titleMap[page]}</h2>
           </div>
-          <div className="top-status"><span className="status-dot" /> LIVE PROTOTYPE</div>
+          <div className="top-status"><span className="status-dot" /> <ISTClock /></div>
         </header>
         <main>{children}</main>
       </section>

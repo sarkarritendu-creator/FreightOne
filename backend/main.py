@@ -40,9 +40,10 @@ class RouteIn(BaseModel): material: str='coking_coal'; origin: str='australia'; 
 class ProcurementIn(BaseModel): material: str='coking_coal'; quantity: int=80000; deadline_days: int=21; preferred_port: str='paradip'; priority: int=50; plant_code: str='RSP'
 class RerouteIn(BaseModel): consignment_id: str
 
-
+# Calculates and formats an ISO date string based on a specified number of days offset from today.
 def fmt_day(days): return (TODAY + timedelta(days=days)).isoformat()
 
+# Generates simulated historical and forecasted freight index values (like the Baltic Dry Index) using trigonometric functions to create realistic-looking market waves and bands.
 def forecast(days=90):
     hist=[]; pred=[]
     base=1320
@@ -56,6 +57,7 @@ def forecast(days=90):
         pred.append({'day':i,'predicted':round(v,1),'lower':round(v-band,1),'upper':round(v+band,1)})
     return {'history':hist,'forecast':pred,'current_bdi':round(last,1),'model_horizon_days':days}
 
+# The core logistics engine. It calculates shipping options by evaluating material prices, origin distance multipliers, port queues, inland travel days, and risk. It factors in priority to adjust costs and assigns vessel sizes (Capesize, Panamax, Handysize) based on tonnage, returning a ranked list of the most optimized routes.
 def route_options(x: RouteIn):
     material=MATERIALS.get(x.material,MATERIALS['coking_coal'])
     origin=ORIGINS.get(x.origin,ORIGINS['australia'])
@@ -78,6 +80,7 @@ def route_options(x: RouteIn):
         better={'port':best['port'],'message':f"{best['port']} reduces estimated landed cost and recovery exposure versus the selected preference."}
     return {'selected_port':selected,'best_overall':best,'options':options,'better_alternative':better,'material':material['name']}
 
+# Calculates inventory cover and reorder requirements. It evaluates current stock against daily consumption and safety limits, generates an urgency score, and invokes route_options to recommend how much to buy and which port to use.
 def procurement(x: ProcurementIn):
     m=MATERIALS.get(x.material,MATERIALS['coking_coal'])
     days_cover=m['inventory_mt']/m['daily_consumption']
@@ -100,24 +103,31 @@ def login(x: LoginIn):
 
 @app.get('/api/reference-data')
 def refs(): return {'materials':MATERIALS,'origins':ORIGINS,'ports':PORTS,'plants':PLANTS}
+
 @app.get('/api/forecast')
 def api_forecast(days:int=90): return forecast(min(max(days,30),180))
+
 @app.get('/api/risk-score')
 def risk_score():
     return {'risk_score':68,'risk_level':'amber','items':[
       {'title':'Low-pressure conditions are affecting the Bay of Bengal shipping corridor.','tags':['WEATHER'],'published':'LIVE'},
       {'title':'Queensland coal export loading has slowed after terminal disruption.','tags':['MARKET'],'published':'LIVE'},
       {'title':'VLSFO bunker prices remain elevated across Indian Ocean routes.','tags':['FUEL'],'published':'LIVE'}]}
+
 @app.get('/api/news')
 def news(material:str='coking_coal',origin:str='australia',port:str='paradip'): return risk_score()
+
 @app.get('/api/market-intelligence')
 def market_intelligence(material:str='coking_coal',origin:str='australia',port:str='paradip',plant_code:str='RSP'):
     m=MATERIALS.get(material,MATERIALS['coking_coal']); cover=m['inventory_mt']/m['daily_consumption']
     return {'buy_more_now':cover<30,'reason':f"{m['name']} has approximately {round(cover)} days of inventory cover. Freight risk is currently elevated, so booking timing should be monitored closely."}
+
 @app.post('/api/route-options')
 def api_routes(x: RouteIn): return route_options(x)
+
 @app.post('/api/procurement-plan')
 def api_procurement(x: ProcurementIn): return procurement(x)
+
 @app.get('/api/consignments')
 def consignments(plant_code:str='RSP', view:str='active'):
     items=[]
@@ -128,24 +138,29 @@ def consignments(plant_code:str='RSP', view:str='active'):
         if view=='past' and c['status']!='Delivered': continue
         items.append({**c,'material_label':MATERIALS[c['material']]['name'],'origin_label':c['origin'],'port_label':PORTS[c['port']]['name'],'plant_label':PLANTS[c['plant']]['name'],'eta_port_date':fmt_day(c['port_eta']),'earliest_dispatch_from_port':fmt_day(c['port_eta']+2),'expected_final_arrival':fmt_day(c['final_days']),'risk_percentage':min(95,20+c['delay_days']*8) if c['status']=='Delayed' else 22})
     return {'consignments':items}
+
 @app.get('/api/consignment/{cid}')
 def consignment(cid:str):
     c=next((x for x in CONSIGNMENTS if x['id']==cid),None)
     if not c: raise HTTPException(404,'Consignment not found')
     return {'consignment':c,'tracking':{'position':c['position'],'status':'Delayed' if c['status']=='Delayed' else 'On schedule','coordinates':[20.3,88.7]}}
+
 @app.post('/api/reroute-suggestion')
 def reroute(x:RerouteIn):
     c=next((z for z in CONSIGNMENTS if z['id']==x.consignment_id),None)
     if not c: raise HTTPException(404,'Consignment not found')
     if c['status']!='Delayed': return {'suggestion':None,'message':'No reroute required for an on-schedule consignment.'}
     return {'suggestion':{'recommended_port':'Paradip Port','recovery_mode':'Divert discharge + priority rail slot','estimated_recovery_days':4,'risk_reduction':31,'additional_cost':1850000,'message':'Reroute via Paradip and reserve a priority inland slot to recover approximately four of the six delayed days.','notification_status':'Draft notification ready for plant logistics control.'}}
+
 @app.get('/api/freight-intelligence')
 def freight_intelligence():
     f=forecast(90)
     return {'forecast':f,'booking_window':{'best_day':18,'expected_savings_percent':4.2,'reason':'Projected freight pressure eases before the next upward market cycle.'},'indices':{'BDI':f['current_bdi'],'Capesize':1880,'Panamax':1540,'Fuel':742}}
+
 @app.get('/api/weather')
 def weather():
     return {'region':'Bay of Bengal','status':'Moderate operational risk','risk':{'green':52,'yellow':26,'orange':15,'red':7},'series':[{'day':i,'risk':round(18+8*math.sin(i/5)+max(0,i-18)*0.7,1)} for i in range(1,31)]}
+
 @app.get('/api/material-market')
 def material_market(material:str='coking_coal'):
     m=MATERIALS.get(material,MATERIALS['coking_coal'])
@@ -153,6 +168,7 @@ def material_market(material:str='coking_coal'):
     for name,mult in [('Australia',1.0),('USA',1.12),('Mozambique',0.96)]: countries.append({'country':name,'price_mt':round(m['price_mt']*mult)})
     countries.sort(key=lambda x:x['price_mt'])
     return {'material':m['name'],'countries':countries,'lowest':countries[0]['country']}
+
 @app.get('/api/inventory')
 def inventory(plant_code:str='RSP'):
     out=[]
@@ -161,6 +177,7 @@ def inventory(plant_code:str='RSP'):
         incoming=sum(c['tonnage'] for c in CONSIGNMENTS if c['plant']==plant_code and c['material']==k and c['status']!='Delayed')
         out.append({'id':k,'material':m['name'],'stock_mt':m['inventory_mt'],'daily_consumption':m['daily_consumption'],'days_cover':round(cover,1),'incoming_mt':incoming,'urgency_index':urgency,'rating':'Critical' if urgency>=8 else 'Watch' if urgency>=5 else 'Healthy'})
     return {'plant':PLANTS[plant_code]['name'],'items':out}
+
 @app.get('/api/alerts')
 def alerts():
     return {'alerts':[
@@ -168,10 +185,12 @@ def alerts():
       {'severity':'medium','type':'WEATHER','title':'Bay of Bengal weather risk elevated','impact':'Possible berth and sailing delay','action':'Monitor vessel ETA'},
       {'severity':'medium','type':'MARKET','title':'BDI trend remains upward','impact':'Future charter cost sensitivity','action':'Review booking window'},
     ]}
+
 @app.post('/api/what-if')
 def what_if(x: RouteIn):
     r=route_options(x); sel=r['selected_port']; best=r['best_overall']
     return {'base':sel,'what_if':best,'difference':{'cost_delta':best['total_cost']-sel['total_cost'],'eta_delta_days':best['eta_days']-sel['eta_days'],'risk_delta':best['risk_score']-sel['risk_score']},'summary':'The model compares the manager-selected scenario against the highest-ranked alternative using the same cost, time and risk logic.'}
+
 @app.get('/api/executive-report')
 def report():
     inv=inventory()['items']; delayed=[c for c in CONSIGNMENTS if c['status']=='Delayed']
